@@ -6,7 +6,17 @@ void main() {
 }
 
 // ignore: non_constant_identifier_names
-final CounterContext = createContext<int>(0);
+final IrrelevantContext = createContext(42);
+
+class Counter extends ContextTag<int> {
+  const Counter();
+}
+
+// ignore: non_constant_identifier_names
+final CounterContext = createTaggedContext(
+  tag: const Counter(),
+  defaultValue: 0,
+);
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
@@ -39,11 +49,15 @@ class Home extends StatelessWidget {
           children: [
             const Text('You have pushed the button this many times:'),
             const SizedBox(height: 16),
-            CounterContext.Consumer(
-              (context, value) => Text(
-                '$value',
-                style: Theme.of(context).textTheme.headline4,
-              ),
+            IrrelevantContext.Provider(
+              builder: (context) {
+                return CounterContext.Consumer(
+                  (context, value) => Text(
+                    '$value',
+                    style: Theme.of(context).textTheme.headline4,
+                  ),
+                );
+              },
             ),
           ],
         ),

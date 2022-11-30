@@ -1,13 +1,25 @@
 import 'package:flutter/material.dart';
 
-class ContextToken {}
+abstract class ContextTag<T> {
+  const ContextTag();
+}
+
+class Anonymous<T> extends ContextTag<T> {
+  const Anonymous();
+}
+
+class TaggedContext<T, K extends ContextTag<T>> extends FlutterContext<T> {
+  TaggedContext(K tag, [T? value]) : super._(tag, value);
+}
 
 class FlutterContext<T> {
-  final ContextToken token;
+  final ContextTag<T> tag;
   late final ValueNotifier<T> _notifier;
   final T? defaultValue;
 
-  FlutterContext._(this.token, [this.defaultValue]);
+  Type get key => tag.runtimeType;
+
+  FlutterContext._(this.tag, [this.defaultValue]);
 
   // ignore: non_constant_identifier_names
   ContextProvider<T> Provider({
@@ -18,9 +30,9 @@ class FlutterContext<T> {
       throw Exception('Neither value nor defaultValue is provided');
     }
 
-    _notifier = ValueNotifier<T>(value ?? defaultValue!);
-
     return ContextProvider<T>(
+      key: ValueKey(key),
+      initialValue: value ?? defaultValue!,
       builder: builder,
       context: this,
     );
@@ -37,77 +49,49 @@ class FlutterContext<T> {
   }
 
   T update(BuildContext context, T Function(T value) update) {
-    final provider = _getProviderElement(context)?.widget as _Provider<T>?;
-
-    final notifier = provider?.context._notifier ?? _notifier;
-
-    final value = update(notifier.value);
-    notifier.value = value;
-    return value;
-  }
-
-  InheritedElement? _getProviderElement(BuildContext context) {
-    while (true) {
-      final nearestContextElement =
-          context.getElementForInheritedWidgetOfExactType<_Provider<T>>();
-
-      if (nearestContextElement == null) {
-        return null;
-      }
-
-      final w = nearestContextElement.widget as _Provider<T>?;
-
-      if (w?.context.token != token) {
-        context = nearestContextElement;
-        continue;
-      } else {
-        return nearestContextElement;
-      }
-    }
+    final newValue = update(_notifier.value);
+    _notifier.value = newValue;
+    return newValue;
   }
 }
 
-class _Provider<T> extends InheritedWidget {
-  final T value;
-  final FlutterContext<T> context;
-
-  const _Provider({
-    required this.value,
-    required this.context,
-    required super.child,
-  });
-
-  @override
-  bool updateShouldNotify(_Provider<T> oldWidget) {
-    return value != oldWidget.value;
-  }
-}
-
-class ContextProvider<T> extends StatelessWidget {
+class ContextProvider<T> extends StatefulWidget {
   final FlutterContext<T> context;
   final WidgetBuilder builder;
+  final T initialValue;
 
   const ContextProvider({
     super.key,
     required this.context,
     required this.builder,
+    required this.initialValue,
   });
 
   @override
+  State<ContextProvider<T>> createState() => _ContextProviderState<T>();
+}
+
+class _ContextProviderState<T> extends State<ContextProvider<T>> {
+  @override
+  void initState() {
+    widget.context._notifier = ValueNotifier<T>(widget.initialValue);
+    super.initState();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return ValueListenableBuilder(
-      valueListenable: this.context._notifier,
-      builder: (context, value, child) {
-        return _Provider<T>(
-          context: this.context,
-          value: value,
-          child: Builder(
-            builder: (context) {
-              return builder(context);
-            },
-          ),
-        );
+    final w = context.dependOnInheritedWidgetOfExactType<DepsProvider>();
+
+    return DepsProvider(
+      deps: {
+        if (w?.deps != null) ...w!.deps,
+        widget.context.key: widget.context,
       },
+      child: Builder(
+        builder: (context) {
+          return widget.builder(context);
+        },
+      ),
     );
   }
 }
@@ -124,21 +108,46 @@ class ContextConsumer<T> extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final providerElement = this.context._getProviderElement(context);
+    final w = context.dependOnInheritedWidgetOfExactType<DepsProvider>();
 
-    if (providerElement == null) {
-      throw Exception(
-        'No provider for type $T found in the widget tree.'
-        'You must wrap your widget tree with a ContextProvider<$T>.',
-      );
+    if (w == null) {
+      throw Exception('No provider found for context $context');
     }
 
-    context.dependOnInheritedElement(providerElement);
+    final notifier = (w.deps[this.context.key] as FlutterContext<T>)._notifier;
 
-    return builder(context, (providerElement.widget as _Provider<T>).value);
+    return ValueListenableBuilder<T>(
+      key: key,
+      valueListenable: notifier,
+      builder: (context, value, child) {
+        return builder(context, value);
+      },
+    );
+  }
+}
+
+class DepsProvider extends InheritedWidget {
+  final Map<Type, FlutterContext> deps;
+
+  const DepsProvider({
+    super.key,
+    required super.child,
+    required this.deps,
+  });
+
+  @override
+  bool updateShouldNotify(covariant InheritedWidget oldWidget) {
+    return false;
   }
 }
 
 FlutterContext<T> createContext<T>([T? defaultValue]) {
-  return FlutterContext<T>._(ContextToken(), defaultValue);
+  return FlutterContext<T>._(Anonymous<T>(), defaultValue);
+}
+
+TaggedContext<T, K> createTaggedContext<T, K extends ContextTag<T>>({
+  required K tag,
+  T? defaultValue,
+}) {
+  return TaggedContext<T, K>(tag, defaultValue);
 }
