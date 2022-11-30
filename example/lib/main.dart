@@ -52,7 +52,7 @@ class Home extends StatelessWidget {
             IrrelevantContext.Provider(
               builder: (context) {
                 return CounterContext.Consumer(
-                  (context, value) => Text(
+                  (context, value, _) => Text(
                     '$value',
                     style: Theme.of(context).textTheme.headline4,
                   ),

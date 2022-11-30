@@ -40,11 +40,13 @@ class FlutterContext<T> {
 
   // ignore: non_constant_identifier_names
   ContextConsumer<T> Consumer(
-    Widget Function(BuildContext context, T value) builder,
-  ) {
+    Widget Function(BuildContext context, T value, Widget? child) builder, {
+    Widget? child,
+  }) {
     return ContextConsumer<T>(
       builder: builder,
       context: this,
+      child: child,
     );
   }
 
@@ -98,12 +100,14 @@ class _ContextProviderState<T> extends State<ContextProvider<T>> {
 
 class ContextConsumer<T> extends StatelessWidget {
   final FlutterContext<T> context;
-  final Widget Function(BuildContext context, T value) builder;
+  final Widget Function(BuildContext context, T value, Widget? child) builder;
+  final Widget? child;
 
   const ContextConsumer({
     super.key,
     required this.context,
     required this.builder,
+    this.child,
   });
 
   @override
@@ -119,8 +123,9 @@ class ContextConsumer<T> extends StatelessWidget {
     return ValueListenableBuilder<T>(
       key: key,
       valueListenable: notifier,
+      child: child,
       builder: (context, value, child) {
-        return builder(context, value);
+        return builder(context, value, child);
       },
     );
   }
