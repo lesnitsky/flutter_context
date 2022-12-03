@@ -211,6 +211,12 @@ abstract class ContextHandlers<T> {
   const ContextHandlers();
 }
 
+abstract class StateContextHandlers<T> extends ContextHandlers<T> {
+  set value(T v);
+
+  void setState(void Function() update);
+}
+
 K useHandlers<K extends ContextHandlers>(
   BuildContext context,
 ) {

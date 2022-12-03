@@ -8,8 +8,13 @@ void main() {
 // ignore: non_constant_identifier_names
 final CounterContext = createContext().withHandlers<CounterHandlers>();
 
-abstract class CounterHandlers extends ContextHandlers<int> {
-  void increment();
+abstract class CounterHandlers implements StateContextHandlers<int> {
+  @override
+  int value = 0;
+
+  void increment() {
+    setState(() => value++);
+  }
 }
 
 class MyApp extends StatefulWidget {
@@ -19,17 +24,7 @@ class MyApp extends StatefulWidget {
   State<MyApp> createState() => _MyAppState();
 }
 
-class _MyAppState extends State<MyApp> implements CounterHandlers {
-  @override
-  int value = 0;
-
-  @override
-  increment() {
-    setState(() {
-      value++;
-    });
-  }
-
+class _MyAppState extends State<MyApp> with CounterHandlers {
   @override
   Widget build(BuildContext context) {
     return CounterContext.Provider(
