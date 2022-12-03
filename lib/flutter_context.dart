@@ -8,18 +8,30 @@ class Anonymous<T> extends ContextTag<T> {
   const Anonymous();
 }
 
-class TaggedContext<T, K extends ContextTag<T>> extends FlutterContext<T> {
-  TaggedContext(K tag, [T? value]) : super._(tag, value);
+class TaggedContext<T, K extends ContextTag<T>> extends DataContext<T> {
+  TaggedContext(
+    K tag, [
+    T? value,
+  ]) : super._(tag, value);
+
+  @override
+  ContextWithHandlers<T, K, U> withHandlers<U extends ContextHandlers<T>>([
+    U? handlers,
+  ]) {
+    return ContextWithHandlers<T, K, U>(
+      tag as K,
+      defaultValue,
+      handlers,
+    );
+  }
 }
 
-class FlutterContext<T> {
+class DataContext<T> {
   final ContextTag<T> tag;
-  late final ValueNotifier<T> _notifier;
   final T? defaultValue;
 
   Type get key => tag.runtimeType;
-
-  FlutterContext._(this.tag, [this.defaultValue]);
+  DataContext._(this.tag, [this.defaultValue]);
 
   // ignore: non_constant_identifier_names
   ContextProvider<T> Provider({
@@ -31,8 +43,7 @@ class FlutterContext<T> {
     }
 
     return ContextProvider<T>(
-      key: ValueKey(key),
-      initialValue: value ?? defaultValue!,
+      value: value ?? defaultValue!,
       builder: builder,
       context: this,
     );
@@ -50,23 +61,54 @@ class FlutterContext<T> {
     );
   }
 
-  T update(BuildContext context, T Function(T value) update) {
-    final newValue = update(_notifier.value);
-    _notifier.value = newValue;
-    return newValue;
+  ContextWithHandlers<T, ContextTag<T>, K>
+      withHandlers<K extends ContextHandlers<T>>([
+    K? handlers,
+  ]) {
+    return ContextWithHandlers<T, ContextTag<T>, K>(
+      tag,
+      defaultValue,
+      handlers,
+    );
+  }
+}
+
+class ContextWithHandlers<T, K extends ContextTag<T>,
+    U extends ContextHandlers<T>> extends TaggedContext<T, K> {
+  final U? handlers;
+
+  ContextWithHandlers(super.tag, super.value, this.handlers);
+
+  @override
+  // ignore: non_constant_identifier_names
+  ContextProvider<T> Provider({
+    T? value,
+    required Widget Function(BuildContext context) builder,
+    U? handlers,
+  }) {
+    final h = handlers ?? this.handlers!;
+
+    return ContextProvider<T>(
+      value: value ?? h.value ?? defaultValue!,
+      builder: builder,
+      additionalDependencies: {U: handlers ?? this.handlers!},
+      context: this,
+    );
   }
 }
 
 class ContextProvider<T> extends StatefulWidget {
-  final FlutterContext<T> context;
+  final DataContext<T> context;
   final WidgetBuilder builder;
-  final T initialValue;
+  final T value;
+  final Map<Type, Object>? additionalDependencies;
 
   const ContextProvider({
     super.key,
     required this.context,
     required this.builder,
-    required this.initialValue,
+    required this.value,
+    this.additionalDependencies,
   });
 
   @override
@@ -74,32 +116,35 @@ class ContextProvider<T> extends StatefulWidget {
 }
 
 class _ContextProviderState<T> extends State<ContextProvider<T>> {
+  T get value => widget.value ?? widget.context.defaultValue!;
+  late final ValueNotifier<T> _notifier = ValueNotifier(value);
+
+  _D? get w => context.dependOnInheritedWidgetOfExactType<_D>();
+
+  late final deps = {
+    if (w?.deps != null) ...w!.deps,
+    widget.context.key: _notifier,
+    if (widget.additionalDependencies != null)
+      ...widget.additionalDependencies!,
+  };
+
   @override
-  void initState() {
-    widget.context._notifier = ValueNotifier<T>(widget.initialValue);
-    super.initState();
+  void didUpdateWidget(covariant ContextProvider<T> oldWidget) {
+    _notifier.value = value;
+    super.didUpdateWidget(oldWidget);
   }
 
   @override
   Widget build(BuildContext context) {
-    final w = context.dependOnInheritedWidgetOfExactType<DepsProvider>();
-
-    return DepsProvider(
-      deps: {
-        if (w?.deps != null) ...w!.deps,
-        widget.context.key: widget.context,
-      },
-      child: Builder(
-        builder: (context) {
-          return widget.builder(context);
-        },
-      ),
+    return _D(
+      deps: deps,
+      child: widget.builder(context),
     );
   }
 }
 
 class ContextConsumer<T> extends StatelessWidget {
-  final FlutterContext<T> context;
+  final DataContext<T> context;
   final Widget Function(BuildContext context, T value, Widget? child) builder;
   final Widget? child;
 
@@ -112,13 +157,13 @@ class ContextConsumer<T> extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final w = context.dependOnInheritedWidgetOfExactType<DepsProvider>();
+    final w = context.dependOnInheritedWidgetOfExactType<_D>();
 
     if (w == null) {
       throw Exception('No provider found for context $context');
     }
 
-    final notifier = (w.deps[this.context.key] as FlutterContext<T>)._notifier;
+    final notifier = w.deps[this.context.key] as ValueNotifier<T>;
 
     return ValueListenableBuilder<T>(
       key: key,
@@ -131,11 +176,10 @@ class ContextConsumer<T> extends StatelessWidget {
   }
 }
 
-class DepsProvider extends InheritedWidget {
-  final Map<Type, FlutterContext> deps;
+class _D extends InheritedWidget {
+  final Map<Type, Object> deps;
 
-  const DepsProvider({
-    super.key,
+  const _D({
     required super.child,
     required this.deps,
   });
@@ -146,13 +190,41 @@ class DepsProvider extends InheritedWidget {
   }
 }
 
-FlutterContext<T> createContext<T>([T? defaultValue]) {
-  return FlutterContext<T>._(Anonymous<T>(), defaultValue);
+DataContext<T> createContext<T>({T? value}) {
+  return DataContext<T>._(Anonymous<T>(), value);
 }
 
-TaggedContext<T, K> createTaggedContext<T, K extends ContextTag<T>>({
+TaggedContext<T, K> createTaggedContext<T, K extends ContextTag<T>,
+    U extends ContextHandlers<T>>({
   required K tag,
-  T? defaultValue,
+  T? value,
+  U? handlers,
 }) {
-  return TaggedContext<T, K>(tag, defaultValue);
+  return TaggedContext<T, K>(
+    tag,
+    value,
+  );
+}
+
+abstract class ContextHandlers<T> {
+  T get value;
+  const ContextHandlers();
+}
+
+K useHandlers<K extends ContextHandlers>(
+  BuildContext context,
+) {
+  final w = context.dependOnInheritedWidgetOfExactType<_D>();
+
+  if (w == null) {
+    throw Exception('No provider found');
+  }
+
+  final handlers = w.deps[K] as K?;
+
+  if (handlers == null) {
+    throw Exception('No $K found');
+  }
+
+  return handlers;
 }

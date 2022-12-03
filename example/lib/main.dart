@@ -6,25 +6,35 @@ void main() {
 }
 
 // ignore: non_constant_identifier_names
-final IrrelevantContext = createContext(42);
+final CounterContext = createContext().withHandlers<CounterHandlers>();
 
-class Counter extends ContextTag<int> {
-  const Counter();
+abstract class CounterHandlers extends ContextHandlers<int> {
+  void increment();
 }
 
-// ignore: non_constant_identifier_names
-final CounterContext = createTaggedContext(
-  tag: const Counter(),
-  defaultValue: 0,
-);
-
-class MyApp extends StatelessWidget {
+class MyApp extends StatefulWidget {
   const MyApp({super.key});
+
+  @override
+  State<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> implements CounterHandlers {
+  @override
+  int value = 0;
+
+  @override
+  increment() {
+    setState(() {
+      value++;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     return CounterContext.Provider(
-      builder: (context) => MaterialApp(
+      handlers: this,
+      builder: (_) => MaterialApp(
         title: 'Flutter Context Demo Page',
         theme: ThemeData(
           primarySwatch: Colors.blue,
@@ -41,6 +51,8 @@ class Home extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final handlers = useHandlers<CounterHandlers>(context);
+
     return Scaffold(
       appBar: AppBar(title: Text(title)),
       body: Center(
@@ -49,23 +61,17 @@ class Home extends StatelessWidget {
           children: [
             const Text('You have pushed the button this many times:'),
             const SizedBox(height: 16),
-            IrrelevantContext.Provider(
-              builder: (context) {
-                return CounterContext.Consumer(
-                  (context, value, _) => Text(
-                    '$value',
-                    style: Theme.of(context).textTheme.headline4,
-                  ),
-                );
-              },
+            CounterContext.Consumer(
+              (context, value, _) => Text(
+                '$value',
+                style: Theme.of(context).textTheme.headline4,
+              ),
             ),
           ],
         ),
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          CounterContext.update(context, (value) => value + 1);
-        },
+        onPressed: handlers.increment,
         tooltip: 'Increment',
         child: const Icon(Icons.add),
       ),
