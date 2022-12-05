@@ -15,6 +15,11 @@ class TaggedContext<T, K extends ContextTag<T>> extends DataContext<T> {
   ]) : super._(tag, value);
 
   @override
+  TaggedContext<T, K> call(T value) {
+    return TaggedContext(tag as K, value);
+  }
+
+  @override
   ContextWithHandlers<T, K, U> withHandlers<U extends ContextHandlers<T>>([
     U? handlers,
   ]) {
@@ -28,10 +33,14 @@ class TaggedContext<T, K extends ContextTag<T>> extends DataContext<T> {
 
 class DataContext<T> {
   final ContextTag<T> tag;
-  final T? defaultValue;
+  T? defaultValue;
 
   Type get key => tag.runtimeType;
   DataContext._(this.tag, [this.defaultValue]);
+
+  DataContext<T> call(T value) {
+    return DataContext._(tag, value);
+  }
 
   // ignore: non_constant_identifier_names
   ContextProvider<T> Provider({
@@ -80,6 +89,11 @@ class ContextWithHandlers<T, K extends ContextTag<T>,
   ContextWithHandlers(super.tag, super.value, this._handlers);
 
   @override
+  ContextWithHandlers<T, K, U> call(T value) {
+    return ContextWithHandlers(tag as K, value, _handlers);
+  }
+
+  @override
   // ignore: non_constant_identifier_names
   ContextProvider<T> Provider({
     T? value,
@@ -89,7 +103,7 @@ class ContextWithHandlers<T, K extends ContextTag<T>,
     final h = handlers ?? _handlers!;
 
     return ContextProvider<T>(
-      value: value ?? h.value ?? defaultValue!,
+      value: value ?? defaultValue!,
       builder: builder,
       additionalDependencies: {U: h},
       wrapper: ({required Widget child}) {
@@ -208,7 +222,7 @@ class _D extends InheritedWidget {
   }
 }
 
-DataContext<T> createContext<T>({T? value}) {
+DataContext<T> createContext<T>([T? value]) {
   return DataContext<T>._(Anonymous<T>(), value);
 }
 
@@ -229,6 +243,7 @@ const _callerToken = Object();
 abstract class ContextHandlers<T> {
   late ValueNotifier<T> _notifier;
   Object? _authorizedCallerToken;
+  Object? _arg;
 
   T get value {
     if (_authorizedCallerToken != _callerToken) {
@@ -250,10 +265,12 @@ abstract class ContextHandlers<T> {
 }
 
 class CallHandlerIntent<T, K extends ContextHandlers<T>> extends Intent {
-  final void Function() action;
+  final Function action;
 
   const CallHandlerIntent(this.action);
 }
+
+final _argsForIntent = {};
 
 class CallHandlerAction<T, K extends ContextHandlers<T>>
     extends Action<CallHandlerIntent<T, K>> {
@@ -274,9 +291,43 @@ class CallHandlerAction<T, K extends ContextHandlers<T>>
   @override
   void invoke(CallHandlerIntent<T, K> intent) {
     _handlers._authorizedCallerToken = _callerToken;
-    intent.action();
+    final arg = _argsForIntent[intent];
+
+    if (arg == null) {
+      intent.action.call();
+    } else {
+      intent.action.call(arg);
+    }
 
     _handlers._authorizedCallerToken = null;
+  }
+}
+
+extension _TypeWrapper<T> on void Function(T) {
+  typeWrapper(void Function() inner, Intent intent, [Object? outerArg]) {
+    if (this is void Function([T])) {
+      return ([T? arg]) {
+        _argsForIntent[intent] = arg ?? outerArg;
+        inner();
+        _argsForIntent.remove(intent);
+      };
+    } else if (this is void Function(T?)) {
+      return ([T? arg]) {
+        _argsForIntent[intent] = arg ?? outerArg;
+        inner();
+        _argsForIntent.remove(intent);
+      };
+    }
+
+    throw Exception('Unsupported type $runtimeType');
+  }
+}
+
+extension NullableArg<T> on void Function(T) {
+  void Function(T? arg) argNullable() {
+    return (T? arg) {
+      this.call(arg as T);
+    };
   }
 }
 
@@ -303,7 +354,7 @@ abstract class HandlersRef<T, K extends ContextHandlers<T>,
     actions._authorizedCallerToken = null;
   }
 
-  void Function()? call(void Function() action) {
+  I? call<I extends Function>(I action, [Object? arg]) {
     intent = CallHandlerIntent<T, K>(action);
 
     final a = Actions.maybeFind(context, intent: intent);
@@ -323,7 +374,14 @@ abstract class HandlersRef<T, K extends ContextHandlers<T>,
 
     actions._notifier = n as ValueNotifier<T>;
 
-    if (a.isEnabled(intent)) return invoke;
+    if (a.isEnabled(intent)) {
+      if (action is Function(T)) return action.typeWrapper(invoke, intent, arg);
+      if (action is Function([T?])) {
+        return action.typeWrapper(invoke, intent, arg);
+      }
+
+      if (action is void Function()) return invoke as I;
+    }
 
     return null;
   }
@@ -365,4 +423,46 @@ HandlersRef<T, K, U>
     context,
     contextKey,
   );
+}
+
+class SetStateHandlers<T> extends ContextHandlers<T> {
+  void setValue(T value) {
+    this.value = value;
+  }
+}
+
+final setBool = SetStateHandlers<bool>();
+
+class MultiContext extends StatelessWidget {
+  final List<DataContext> contexts;
+  final WidgetBuilder builder;
+
+  const MultiContext({
+    super.key,
+    required this.contexts,
+    required this.builder,
+  });
+
+  Widget _unwrap(
+    BuildContext context,
+    List<DataContext> contexts,
+    WidgetBuilder builder,
+  ) {
+    if (contexts.isEmpty) {
+      return builder(context);
+    }
+
+    return contexts.first.Provider(
+      builder: (context) => _unwrap(
+        context,
+        contexts.sublist(1),
+        builder,
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return _unwrap(context, contexts, builder);
+  }
 }
