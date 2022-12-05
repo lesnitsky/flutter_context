@@ -6,34 +6,31 @@ void main() {
 }
 
 // ignore: non_constant_identifier_names
-final CounterContext = createContext().withHandlers<CounterHandlers>();
+final CounterContext = createContext<int>().withHandlers(CounterHandlers());
 
-abstract class CounterHandlers implements StateContextHandlers<int> {
+class CounterHandlers extends ContextHandlers<int> {
   @override
-  int value = 0;
+  Set<Function> get disabledActions {
+    return {
+      if (value >= 5) increment,
+    };
+  }
 
   void increment() {
-    setState(() => value++);
+    value++;
   }
 }
 
-class MyApp extends StatefulWidget {
+class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
   @override
-  State<MyApp> createState() => _MyAppState();
-}
-
-class _MyAppState extends State<MyApp> with CounterHandlers {
-  @override
-  Widget build(BuildContext context) {
+  Widget build(context) {
     return CounterContext.Provider(
-      handlers: this,
+      value: 0,
       builder: (_) => MaterialApp(
         title: 'Flutter Context Demo Page',
-        theme: ThemeData(
-          primarySwatch: Colors.blue,
-        ),
+        theme: ThemeData(primarySwatch: Colors.blue),
         home: const Home(title: 'Flutter Context Demo Page'),
       ),
     );
@@ -46,7 +43,8 @@ class Home extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final handlers = useHandlers<CounterHandlers>(context);
+    final h = CounterContext.handlers(context);
+    final increment = h(h.actions.increment);
 
     return Scaffold(
       appBar: AppBar(title: Text(title)),
@@ -65,11 +63,13 @@ class Home extends StatelessWidget {
           ],
         ),
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: handlers.increment,
-        tooltip: 'Increment',
-        child: const Icon(Icons.add),
-      ),
+      floatingActionButton: increment != null
+          ? FloatingActionButton(
+              onPressed: increment,
+              tooltip: 'Increment',
+              child: const Icon(Icons.add),
+            )
+          : null,
     );
   }
 }
