@@ -65,7 +65,7 @@ class DataContext<T> {
   }) {
     return ContextConsumer<T>(
       builder: builder,
-      context: this,
+      dataContext: this,
       child: child,
     );
   }
@@ -176,13 +176,13 @@ class _ContextProviderState<T> extends State<ContextProvider<T>> {
 }
 
 class ContextConsumer<T> extends StatelessWidget {
-  final DataContext<T> context;
+  final DataContext<T> dataContext;
   final Widget Function(BuildContext context, T value, Widget? child) builder;
   final Widget? child;
 
   const ContextConsumer({
     super.key,
-    required this.context,
+    required this.dataContext,
     required this.builder,
     this.child,
   });
@@ -195,7 +195,7 @@ class ContextConsumer<T> extends StatelessWidget {
       throw Exception('No provider found for context $context');
     }
 
-    final notifier = w.deps[this.context.key] as ValueNotifier<T>;
+    final notifier = w.deps[dataContext.key] as ValueNotifier<T>;
 
     return ValueListenableBuilder<T>(
       key: key,
@@ -243,7 +243,6 @@ const _callerToken = Object();
 abstract class ContextHandlers<T> {
   late ValueNotifier<T> _notifier;
   Object? _authorizedCallerToken;
-  Object? _arg;
 
   T get value {
     if (_authorizedCallerToken != _callerToken) {
@@ -432,6 +431,12 @@ class SetStateHandlers<T> extends ContextHandlers<T> {
 }
 
 final setBool = SetStateHandlers<bool>();
+final setInt = SetStateHandlers<int>();
+final setDouble = SetStateHandlers<double>();
+final setNum = SetStateHandlers<num>();
+final setString = SetStateHandlers<String>();
+final setDate = SetStateHandlers<DateTime>();
+final setDuration = SetStateHandlers<Duration>();
 
 class MultiContext extends StatelessWidget {
   final List<DataContext> contexts;
@@ -464,5 +469,31 @@ class MultiContext extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return _unwrap(context, contexts, builder);
+  }
+}
+
+abstract class ConsumerWidget<T> extends Widget {
+  DataContext<T> get context;
+  const ConsumerWidget({Key? key}) : super(key: key);
+
+  @override
+  Element createElement() {
+    return ConsumerWidgetElement(this);
+  }
+
+  Widget build(BuildContext context, T value);
+}
+
+class ConsumerWidgetElement<T> extends ComponentElement {
+  ConsumerWidgetElement(ConsumerWidget<T> widget) : super(widget);
+
+  @override
+  ConsumerWidget<T> get widget => super.widget as ConsumerWidget<T>;
+
+  @override
+  Widget build() {
+    return widget.context.Consumer(
+      (context, value, child) => widget.build(this, value),
+    );
   }
 }
