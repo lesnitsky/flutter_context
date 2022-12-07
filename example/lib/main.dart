@@ -6,7 +6,7 @@ void main() {
 }
 
 final Counter = createContext<int>().withHandlers(CounterHandlers());
-final DeltaModifier = createContext(false).withHandlers(setBool);
+final DeltaModifier = createContext<bool>().withHandlers(setBool);
 
 class CounterHandlers extends ContextHandlers<int> {
   @override
@@ -45,10 +45,10 @@ class Home extends ConsumerWidget<bool> {
   const Home({super.key, required this.title});
 
   @override
-  DataContext<bool> get context => DeltaModifier;
+  Context get context => DeltaModifier;
 
   @override
-  Widget build(BuildContext context, bool value) {
+  Widget build(BuildContext context, bool value, Widget? child) {
     final h = Counter.handlers(context);
     final increment = h(h.actions.increment, value ? 10 : null);
 
@@ -83,7 +83,7 @@ class CounterText extends ConsumerWidget<int> {
   const CounterText({super.key});
 
   @override
-  Widget build(BuildContext context, int value) {
+  Widget build(BuildContext context, int value, Widget? child) {
     return Text(
       '$value',
       style: Theme.of(context).textTheme.headline4,
@@ -91,17 +91,17 @@ class CounterText extends ConsumerWidget<int> {
   }
 
   @override
-  DataContext<int> get context => Counter;
+  Context get context => Counter;
 }
 
 class DeltaModifierCheckbox extends ConsumerWidget<bool> {
   const DeltaModifierCheckbox({super.key});
 
   @override
-  DataContext<bool> get context => DeltaModifier;
+  Context get context => DeltaModifier;
 
   @override
-  Widget build(BuildContext context, bool value) {
+  Widget build(BuildContext context, bool value, Widget? child) {
     final d = DeltaModifier.handlers(context);
 
     return CheckboxListTile(
