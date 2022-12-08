@@ -6,8 +6,31 @@ abstract class ContextTag<T> {
   const ContextTag();
 }
 
+abstract class Init<T, D, K extends ContextTag<T>> {
+  D Function() get init;
+
+  D initialData(BuildContext context) {
+    final w = context.dependOnInheritedWidgetOfExactType<_D>();
+    if (w == null) {
+      throw Exception('No initializer found for $D');
+    }
+
+    final data = w.deps[_InitialDataTag<T, K>] as D?;
+
+    if (data == null) {
+      throw Exception('No initial data found for $D');
+    }
+
+    return data;
+  }
+}
+
+class _InitialDataTag<T, K extends ContextTag<T>> {
+  const _InitialDataTag();
+}
+
 class _HandlersTag<T, K extends ContextHandlers<T>, U extends ContextTag<T>> {
-  final Context<T, K, U> context;
+  final Context<T, T, K, U> context;
   const _HandlersTag(this.context);
 }
 
@@ -15,24 +38,32 @@ class Anonymous<T> extends ContextTag<T> {
   const Anonymous();
 }
 
-class NoopActions<T> extends ContextHandlers<T> {}
+class NoopHandlers<T> extends ContextHandlers<T> {}
 
-abstract class Context<T, K extends ContextHandlers<T>,
+typedef Mapper<T, K> = K Function(T value);
+
+class Constant<T> {
+  const Constant();
+  T call(T value) => value;
+}
+
+abstract class Context<IT, T, K extends ContextHandlers<T>,
     U extends ContextTag<T>> {
   final U tag;
   final K actions;
+  final Mapper<IT, T>? mapper;
 
-  const Context(this.tag, this.actions);
+  const Context(this.tag, this.actions, [this.mapper]);
 
-  Context<T, K, U> call(T value);
-  Context<T, I, U> withHandlers<I extends ContextHandlers<T>>(I handlers);
-  Context<T, K, I> withTag<I extends ContextTag<T>>(I tag);
+  Context<IT, T, K, U> call(IT value);
+  Context<IT, T, I, U> withHandlers<I extends ContextHandlers<T>>(I handlers);
+  Context<IT, T, K, I> withTag<I extends ContextTag<T>>(I tag);
 
   Widget Consumer(
     Widget Function(BuildContext context, T value, Widget? child) builder, {
     Widget? child,
   }) {
-    return ContextConsumer<T>(
+    return ContextConsumer<IT, T>(
       builder: builder,
       context: this,
       child: child,
@@ -60,15 +91,15 @@ abstract class Context<T, K extends ContextHandlers<T>,
   }
 }
 
-class PendingContext<T, K extends ContextHandlers<T>, U extends ContextTag<T>>
-    extends Context<T, K, U> {
+class PendingContext<IT, T, K extends ContextHandlers<T>,
+    U extends ContextTag<T>> extends Context<IT, T, K, U> {
   const PendingContext(super.tag, super.actions);
 
   Widget Provider({
-    required T value,
+    required IT value,
     required Widget Function(BuildContext context) builder,
   }) {
-    return ContextProvider<T, K, U>(
+    return ContextProvider<IT, T, K, U>(
       value: value,
       builder: builder,
       context: this,
@@ -76,49 +107,50 @@ class PendingContext<T, K extends ContextHandlers<T>, U extends ContextTag<T>>
   }
 
   @override
-  ValueContext<T, K, U> call(T value) {
+  ValueContext<IT, T, K, U> call(IT value) {
     return ValueContext(tag, actions, value);
   }
 
   @override
-  PendingContext<T, I, U> withHandlers<I extends ContextHandlers<T>>(
+  PendingContext<IT, T, I, U> withHandlers<I extends ContextHandlers<T>>(
     I handlers,
   ) {
     return PendingContext(tag, handlers);
   }
 
   @override
-  PendingContext<T, K, I> withTag<I extends ContextTag<T>>(I tag) {
+  PendingContext<IT, T, K, I> withTag<I extends ContextTag<T>>(I tag) {
     return PendingContext(tag, actions);
   }
 }
 
-class ValueContext<T, K extends ContextHandlers<T>, U extends ContextTag<T>>
-    extends Context<T, K, U> {
-  final T value;
+class ValueContext<IT, T, K extends ContextHandlers<T>, U extends ContextTag<T>>
+    extends Context<IT, T, K, U> {
+  final IT value;
 
   const ValueContext(super.tag, super.handlers, this.value);
 
   @override
-  ValueContext<T, K, U> call(T value) {
+  ValueContext<IT, T, K, U> call(IT value) {
     return ValueContext(tag, actions, value);
   }
 
   @override
-  ValueContext<T, I, U> withHandlers<I extends ContextHandlers<T>>(I handlers) {
+  ValueContext<IT, T, I, U> withHandlers<I extends ContextHandlers<T>>(
+      I handlers) {
     return ValueContext(tag, handlers, value);
   }
 
   @override
-  ValueContext<T, K, I> withTag<I extends ContextTag<T>>(I tag) {
+  ValueContext<IT, T, K, I> withTag<I extends ContextTag<T>>(I tag) {
     return ValueContext(tag, actions, value);
   }
 
   Widget Provider({
-    T? value,
+    IT? value,
     required Widget Function(BuildContext context) builder,
   }) {
-    return ContextProvider<T, K, U>(
+    return ContextProvider<IT, T, K, U>(
       value: value ?? this.value,
       builder: builder,
       context: this,
@@ -126,11 +158,11 @@ class ValueContext<T, K extends ContextHandlers<T>, U extends ContextTag<T>>
   }
 }
 
-class ContextProvider<T, K extends ContextHandlers<T>, U extends ContextTag<T>>
-    extends StatefulWidget {
-  final Context<T, K, U> context;
+class ContextProvider<IT, T, K extends ContextHandlers<T>,
+    U extends ContextTag<T>> extends StatefulWidget {
+  final Context<IT, T, K, U> context;
   final WidgetBuilder builder;
-  final T value;
+  final IT value;
 
   const ContextProvider({
     super.key,
@@ -140,22 +172,24 @@ class ContextProvider<T, K extends ContextHandlers<T>, U extends ContextTag<T>>
   });
 
   @override
-  State<ContextProvider<T, K, U>> createState() =>
-      _ContextProviderState<T, K, U>();
+  State<ContextProvider<IT, T, K, U>> createState() =>
+      _ContextProviderState<IT, T, K, U>();
 }
 
-class _ContextProviderState<T, K extends ContextHandlers<T>,
-    U extends ContextTag<T>> extends State<ContextProvider<T, K, U>> {
-  T get value => widget.value;
+class _ContextProviderState<IT, T, K extends ContextHandlers<T>,
+    U extends ContextTag<T>> extends State<ContextProvider<IT, T, K, U>> {
+  IT get value => widget.value;
 
-  late final ValueNotifier<T> _notifier = ValueNotifier(value);
+  late final ValueNotifier<IT> _notifier = ValueNotifier(value);
 
   _D? get w => context.dependOnInheritedWidgetOfExactType<_D>();
 
-  late final deps = {
+  late final deps = <Type, dynamic>{
     if (w?.deps != null) ...w!.deps,
     widget.context.tag.runtimeType: _notifier,
     _HandlersTag<T, K, U>: widget.context.actions,
+    if (widget.context is Init)
+      _InitialDataTag<T, U>: (widget.context as Init).init(),
   };
 
   Widget _defaultWrapper({required Widget child}) => child;
@@ -170,14 +204,14 @@ class _ContextProviderState<T, K extends ContextHandlers<T>,
   }
 
   @override
-  void didUpdateWidget(covariant ContextProvider<T, K, U> oldWidget) {
+  void didUpdateWidget(covariant ContextProvider<IT, T, K, U> oldWidget) {
     _notifier.value = value;
     super.didUpdateWidget(oldWidget);
   }
 
   @override
   Widget build(BuildContext context) {
-    final wrapper = widget.context.actions is NoopActions
+    final wrapper = widget.context.actions is NoopHandlers
         ? _defaultWrapper
         : _actionsWrapper;
 
@@ -192,7 +226,7 @@ class _ContextProviderState<T, K extends ContextHandlers<T>,
   }
 }
 
-class ContextConsumer<T> extends StatelessWidget {
+class ContextConsumer<IT, T> extends StatelessWidget {
   final Context context;
   final Widget Function(BuildContext context, T value, Widget? child) builder;
   final Widget? child;
@@ -221,21 +255,25 @@ class ContextConsumer<T> extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final notifier = getNotifier<T>(context, this.context);
+    final notifier = getNotifier<IT>(context, this.context);
 
-    return ValueListenableBuilder<T>(
+    return ValueListenableBuilder<IT>(
       key: key,
       valueListenable: notifier,
       child: child,
       builder: (context, value, child) {
-        return builder(context, value, child);
+        return builder(
+          context,
+          this.context.mapper?.call(value) ?? value as T,
+          child,
+        );
       },
     );
   }
 }
 
 class _D extends InheritedWidget {
-  final Map<Type, Object> deps;
+  final Map<Type, dynamic> deps;
 
   const _D({
     required super.child,
@@ -246,20 +284,6 @@ class _D extends InheritedWidget {
   bool updateShouldNotify(covariant InheritedWidget oldWidget) {
     return false;
   }
-}
-
-class ValueContextBuilder<T, K extends ContextHandlers<T>,
-    U extends ContextTag<T>> {
-  final T value;
-
-  ValueContextBuilder(this.value);
-}
-
-PendingContext<T, NoopActions<T>, Anonymous<T>> createContext<T>() {
-  return PendingContext<T, NoopActions<T>, Anonymous<T>>(
-    Anonymous<T>(),
-    NoopActions<T>(),
-  );
 }
 
 const _callerToken = Object();
@@ -494,9 +518,17 @@ class ConsumerWidgetElement<T> extends ComponentElement {
 
   @override
   Widget build() {
-    return ContextConsumer<T>(
-      context: widget.context,
-      builder: (context, value, child) => widget.build(this, value, child),
+    return widget.context.Consumer(
+      (context, value, child) {
+        return widget.build(context, value, child);
+      },
     );
   }
+}
+
+PendingContext<T, T, NoopHandlers<T>, Anonymous<T>> createContext<T>() {
+  return PendingContext<T, T, NoopHandlers<T>, Anonymous<T>>(
+    Anonymous<T>(),
+    NoopHandlers<T>(),
+  );
 }
