@@ -26,15 +26,12 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(context) {
-    return MultiContext(
-      contexts: [
-        DeltaModifier(false),
-        Counter(0),
-      ],
-      builder: (_) => MaterialApp(
-        title: 'Flutter Context Demo Page',
-        theme: ThemeData(primarySwatch: Colors.blue),
-        home: const Home(title: 'Flutter Context Demo Page'),
+    return DeltaModifier(false).Provider(
+      builder: (_) => Counter(0).Provider(
+        builder: (_) => const MaterialApp(
+          title: 'Counter',
+          home: Home(title: 'Counter Home Page'),
+        ),
       ),
     );
   }
