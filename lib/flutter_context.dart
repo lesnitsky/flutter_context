@@ -476,25 +476,8 @@ PendingContext<T, ContextHandlers<T>, Anonymous<T>> createContext<T>() {
   );
 }
 
-class _Box<T> {
-  late T value;
-  _Box();
-}
-
 abstract class LateInitContextHandlers<T> extends ContextHandlers<T> {
-  _Box<T>? _box;
-
-  @override
-  set value(T value) {
-    if (_box != null) {
-      _box!.value = value;
-      return;
-    }
-
-    super.value = value;
-  }
-
-  void init();
+  void init(void Function(T value) setValue);
 }
 
 class LateInitContext<T, K extends LateInitContextHandlers<T>,
@@ -554,12 +537,11 @@ class __LateInitContextProviderState<T, K extends LateInitContextHandlers<T>,
   void initState() {
     super.initState();
 
-    widget.context.actions._box = _Box<T>();
-    widget.context.actions.init();
-
-    value = widget.context.actions._box!.value;
-
-    widget.context.actions._box = null;
+    widget.context.actions.init(((value) {
+      setState(() {
+        this.value = value;
+      });
+    }));
   }
 
   @override
@@ -583,7 +565,7 @@ class __LateInitContextProviderState<T, K extends LateInitContextHandlers<T>,
 
 class NoopLateInitContextHandlers<T> extends LateInitContextHandlers<T> {
   @override
-  void init() {
+  void init(setValue) {
     throw Exception('init() is not implemented');
   }
 }
