@@ -230,6 +230,20 @@ class ContextConsumer<T, K extends ContextHandlers<T>, U extends ContextTag<T>>
     return notifier;
   }
 
+  static ValueNotifier<T> getNotifierByTag<T, K>(
+    BuildContext context,
+    K tag,
+  ) {
+    final w = context.dependOnInheritedWidgetOfExactType<_D>();
+
+    if (w == null) {
+      throw Exception('No provider found for context $K');
+    }
+
+    final notifier = w.deps[tag.runtimeType] as ValueNotifier<T>;
+    return notifier;
+  }
+
   @override
   Widget build(BuildContext context) {
     final notifier = getNotifier<T>(context, this.context);
