@@ -1,6 +1,6 @@
 name: flutter_context
 description: React-like Context API for Flutter
-version: 0.2.0
+version: 0.3.0
 homepage: https://github.com/lesnitsky/flutter_context
 
 environment:
