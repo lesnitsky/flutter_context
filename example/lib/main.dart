@@ -5,21 +5,17 @@ void main() {
   runApp(const MyApp());
 }
 
-final Counter = createContext<int>().withHandlers(CounterHandlers());
-final DeltaModifier = createContext<bool>().withHandlers(setBool);
-
-class CounterHandlers extends ContextHandlers<int> {
-  @override
-  Set<Function> get disabledActions {
-    return {
-      if (value >= 15) increment,
-    };
-  }
-
-  void increment([int delta = 1]) {
-    value += delta;
-  }
+class CounterTag extends ContextTag<int> {
+  const CounterTag();
 }
+
+final Counter = createContext<int>().withTag(const CounterTag());
+
+class DeltaTag extends ContextTag<bool?> {
+  const DeltaTag();
+}
+
+final DeltaModifier = createContext<bool?>().withTag(const DeltaTag());
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
@@ -37,18 +33,12 @@ class MyApp extends StatelessWidget {
   }
 }
 
-class Home extends ConsumerWidget<bool> {
+class Home extends StatelessWidget {
   final String title;
   const Home({super.key, required this.title});
 
   @override
-  Context get context => DeltaModifier;
-
-  @override
-  Widget build(BuildContext context, bool value, Widget? child) {
-    final h = Counter.handlers(context);
-    final increment = h(h.actions.increment, value ? 10 : null);
-
+  Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: Text(title)),
       body: Center(
@@ -65,45 +55,48 @@ class Home extends ConsumerWidget<bool> {
           ],
         ),
       ),
-      floatingActionButton: increment != null
-          ? FloatingActionButton(
-              onPressed: increment,
-              tooltip: 'Increment',
-              child: const Icon(Icons.add),
-            )
-          : null,
+      floatingActionButton: const IncrementButton(),
+    );
+  }
+}
+
+class IncrementButton extends ConsumerWidget<bool?> {
+  const IncrementButton({super.key, super.tag = const DeltaTag()});
+
+  int Function(int value) increment(bool? delta) {
+    return (v) => v + (delta ?? false ? 10 : 1);
+  }
+
+  @override
+  Widget build(BuildContext context, bool? value, Widget? child) {
+    return FloatingActionButton(
+      onPressed: () {
+        context.sink(const CounterTag())?.update(increment(value));
+      },
+      tooltip: 'Increment',
+      child: const Icon(Icons.add),
     );
   }
 }
 
 class CounterText extends ConsumerWidget<int> {
-  const CounterText({super.key});
+  const CounterText({super.key, super.tag = const CounterTag()});
 
   @override
   Widget build(BuildContext context, int value, Widget? child) {
-    return Text(
-      '$value',
-      style: Theme.of(context).textTheme.headline4,
-    );
+    final headlineStyle = Theme.of(context).textTheme.headline4;
+    return Text(value.toString(), style: headlineStyle);
   }
-
-  @override
-  Context get context => Counter;
 }
 
-class DeltaModifierCheckbox extends ConsumerWidget<bool> {
-  const DeltaModifierCheckbox({super.key});
+class DeltaModifierCheckbox extends ConsumerWidget<bool?> {
+  const DeltaModifierCheckbox({super.key, super.tag = const DeltaTag()});
 
   @override
-  Context get context => DeltaModifier;
-
-  @override
-  Widget build(BuildContext context, bool value, Widget? child) {
-    final d = DeltaModifier.handlers(context);
-
+  Widget build(BuildContext context, bool? value, Widget? child) {
     return CheckboxListTile(
       value: value,
-      onChanged: d(d.actions.setValue)?.argNullable(),
+      onChanged: context.sink(tag)?.add,
       title: const Text('Increment by 10'),
     );
   }
