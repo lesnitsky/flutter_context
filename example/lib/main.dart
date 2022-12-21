@@ -5,29 +5,22 @@ void main() {
   runApp(const MyApp());
 }
 
-class CounterTag extends ContextTag<int> {
-  const CounterTag();
-}
-
-final Counter = createContext<int>().withTag(const CounterTag());
-
-class DeltaTag extends ContextTag<bool?> {
-  const DeltaTag();
-}
-
-final DeltaModifier = createContext<bool?>().withTag(const DeltaTag());
+final Counter = createContext<int>();
+final DeltaModifier = createContext<bool?>();
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
   @override
   Widget build(context) {
-    return DeltaModifier(false).Provider(
-      builder: (_) => Counter(0).Provider(
-        builder: (_) => const MaterialApp(
-          title: 'Counter',
-          home: Home(title: 'Counter Home Page'),
-        ),
+    return context.mount(
+      children: [
+        Counter(0),
+        DeltaModifier(false),
+      ],
+      child: const MaterialApp(
+        title: 'Flutter Demo',
+        home: Home(title: 'Flutter Demo Home Page'),
       ),
     );
   }
@@ -61,17 +54,17 @@ class Home extends StatelessWidget {
 }
 
 class IncrementButton extends ConsumerWidget<bool?> {
-  const IncrementButton({super.key, super.tag = const DeltaTag()});
+  const IncrementButton({super.key});
 
   int Function(int value) increment(bool? delta) {
     return (v) => v + (delta ?? false ? 10 : 1);
   }
 
   @override
-  Widget build(BuildContext context, bool? value, Widget? child) {
+  Widget build(BuildContext context, bool? value) {
     return FloatingActionButton(
       onPressed: () {
-        context.sink(const CounterTag())?.update(increment(value));
+        context.sink<int>()?.update(increment(value));
       },
       tooltip: 'Increment',
       child: const Icon(Icons.add),
@@ -80,23 +73,23 @@ class IncrementButton extends ConsumerWidget<bool?> {
 }
 
 class CounterText extends ConsumerWidget<int> {
-  const CounterText({super.key, super.tag = const CounterTag()});
+  const CounterText({super.key});
 
   @override
-  Widget build(BuildContext context, int value, Widget? child) {
+  Widget build(BuildContext context, int value) {
     final headlineStyle = Theme.of(context).textTheme.headline4;
     return Text(value.toString(), style: headlineStyle);
   }
 }
 
 class DeltaModifierCheckbox extends ConsumerWidget<bool?> {
-  const DeltaModifierCheckbox({super.key, super.tag = const DeltaTag()});
+  const DeltaModifierCheckbox({super.key});
 
   @override
-  Widget build(BuildContext context, bool? value, Widget? child) {
+  Widget build(BuildContext context, bool? value) {
     return CheckboxListTile(
       value: value,
-      onChanged: context.sink(tag)?.add,
+      onChanged: context.sink<bool?>()?.add,
       title: const Text('Increment by 10'),
     );
   }
