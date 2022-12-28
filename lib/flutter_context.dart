@@ -130,6 +130,8 @@ class _ContextProviderState<T, K extends ContextTag<T>>
   late final ValueNotifier<T> _notifier = ValueNotifier(value);
   late final _notifierKey = widget.context.tag;
 
+  bool _reassemble = false;
+
   _D? get w => context.dependOnInheritedWidgetOfExactType<_D>();
 
   late final Map<Object, dynamic> deps = {
@@ -143,6 +145,22 @@ class _ContextProviderState<T, K extends ContextTag<T>>
       deps: deps,
       child: Builder(builder: widget.builder),
     );
+  }
+
+  @override
+  void didUpdateWidget(covariant ContextProvider<T, K> oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!_reassemble) {
+      _notifier.value = value;
+    } else {
+      _reassemble = false;
+    }
+  }
+
+  @override
+  void reassemble() {
+    super.reassemble();
+    _reassemble = true;
   }
 }
 
@@ -177,7 +195,6 @@ class ContextConsumer<T> extends StatelessWidget {
     final notifier = getNotifier<T>(context, tag);
 
     return ValueListenableBuilder<T>(
-      key: key,
       valueListenable: notifier,
       child: child,
       builder: (context, value, child) {
