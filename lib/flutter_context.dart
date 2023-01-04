@@ -150,10 +150,15 @@ class _ContextProviderState<T, K extends ContextTag<T>>
   @override
   void didUpdateWidget(covariant ContextProvider<T, K> oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (!_reassemble) {
-      _notifier.value = value;
-    } else {
+    if (_reassemble) {
       _reassemble = false;
+      return;
+    }
+
+    if (oldWidget.context != widget.context) {
+      _notifier.value = widget.value;
+    } else {
+      _notifier.value = value;
     }
   }
 
@@ -183,10 +188,15 @@ class ContextConsumer<T> extends StatelessWidget {
     final w = context.dependOnInheritedWidgetOfExactType<_D>();
 
     if (w == null) {
-      throw Exception('No provider found for context $tag');
+      throw Exception('No provider found for context ${tag.runtimeType}');
     }
 
-    final notifier = w.deps[tag] as ValueNotifier<T>;
+    final notifier = w.deps[tag] as ValueNotifier<T>?;
+
+    if (notifier == null) {
+      throw Exception('No provider found for context ${tag.runtimeType}');
+    }
+
     return notifier;
   }
 
@@ -327,7 +337,7 @@ class _ValueNotifierSink<T> extends ContextSink<T> {
   }
 }
 
-extension SinkProvider on BuildContext {
+extension ContextSinkExtension on BuildContext {
   ContextSink<T>? sink<T>([ContextTag<T>? tag]) {
     final sink = _ValueNotifierSink<T>(this, tag ?? TypeTag<T>());
     if (sink._notifier == null) {
