@@ -2,13 +2,12 @@
 
 import 'package:flutter/material.dart';
 
-abstract class ContextTag<T> {
-  const ContextTag();
+abstract class Tag<T> {
+  const Tag();
 }
 
-final _typeTags = <Type, ContextTag>{};
-
-class TypeTag<T> extends ContextTag<T> {
+class TypeTag<T> extends Tag<T> {
+  static final _typeTags = <Type, Tag>{};
   factory TypeTag() {
     return (_typeTags[T] ??= TypeTag<T>._()) as TypeTag<T>;
   }
@@ -16,13 +15,24 @@ class TypeTag<T> extends ContextTag<T> {
   const TypeTag._();
 }
 
-abstract class Context<T, K extends ContextTag<T>> {
+class ValueTag<T> extends Tag<T> {
+  static final _tags = <dynamic, ValueTag>{};
+
+  factory ValueTag(T value) {
+    final tag = _tags[value] ??= ValueTag<T>._();
+    return tag as ValueTag<T>;
+  }
+
+  const ValueTag._();
+}
+
+abstract class Context<T, K extends Tag<T>> {
   final K tag;
 
   const Context(this.tag);
 
   Context<T, K> call(T value);
-  Context<T, I> withTag<I extends ContextTag<T>>(I tag);
+  Context<T, I> withTag<I extends Tag<T>>(I tag);
 
   Widget Consumer(
     Widget Function(BuildContext context, T value, Widget? child) builder, {
@@ -36,7 +46,7 @@ abstract class Context<T, K extends ContextTag<T>> {
   }
 }
 
-class PendingContext<T, K extends ContextTag<T>> extends Context<T, K> {
+class PendingContext<T, K extends Tag<T>> extends Context<T, K> {
   const PendingContext(super.tag);
 
   Widget Provider({
@@ -56,12 +66,12 @@ class PendingContext<T, K extends ContextTag<T>> extends Context<T, K> {
   }
 
   @override
-  PendingContext<T, I> withTag<I extends ContextTag<T>>(I tag) {
+  PendingContext<T, I> withTag<I extends Tag<T>>(I tag) {
     return PendingContext(tag);
   }
 }
 
-abstract class ValueContext<T, K extends ContextTag<T>> extends Context<T, K> {
+abstract class ValueContext<T, K extends Tag<T>> extends Context<T, K> {
   T get value;
 
   const ValueContext(super.tag);
@@ -72,7 +82,7 @@ abstract class ValueContext<T, K extends ContextTag<T>> extends Context<T, K> {
   }
 
   @override
-  ValueContext<T, I> withTag<I extends ContextTag<T>>(I tag) {
+  ValueContext<T, I> withTag<I extends Tag<T>>(I tag) {
     return FinalContext(tag, value);
   }
 
@@ -91,14 +101,14 @@ abstract class ValueContext<T, K extends ContextTag<T>> extends Context<T, K> {
   }
 }
 
-class FinalContext<T, K extends ContextTag<T>> extends ValueContext<T, K> {
+class FinalContext<T, K extends Tag<T>> extends ValueContext<T, K> {
   @override
   final T value;
 
   const FinalContext(super.tag, this.value);
 }
 
-class ContextProvider<T, K extends ContextTag<T>> extends StatefulWidget {
+class ContextProvider<T, K extends Tag<T>> extends StatefulWidget {
   final Context<T, K> context;
   final WidgetBuilder? builder;
   final Widget? child;
@@ -117,7 +127,7 @@ class ContextProvider<T, K extends ContextTag<T>> extends StatefulWidget {
   State<ContextProvider<T, K>> createState() => _ContextProviderState<T, K>();
 }
 
-class _ContextProviderState<T, K extends ContextTag<T>>
+class _ContextProviderState<T, K extends Tag<T>>
     extends State<ContextProvider<T, K>> {
   T get value => widget.value;
 
@@ -164,7 +174,7 @@ class _ContextProviderState<T, K extends ContextTag<T>>
 }
 
 class ContextConsumer<T> extends StatelessWidget {
-  final ContextTag<T> tag;
+  final Tag<T> tag;
   final Widget Function(BuildContext context, T value, Widget? child) builder;
   final Widget? child;
 
@@ -177,7 +187,7 @@ class ContextConsumer<T> extends StatelessWidget {
 
   static ValueNotifier<T> getNotifier<T>(
     BuildContext context,
-    ContextTag<T> tag,
+    Tag<T> tag,
   ) {
     final w = context.dependOnInheritedWidgetOfExactType<_D>();
 
@@ -226,11 +236,11 @@ class _D extends InheritedWidget {
   }
 }
 
-PendingContext<T, ContextTag<T>> createContext<T>() {
-  return PendingContext<T, ContextTag<T>>(TypeTag<T>());
+PendingContext<T, Tag<T>> createContext<T>() {
+  return PendingContext<T, Tag<T>>(TypeTag<T>());
 }
 
-class LateInitContext<T, K extends ContextTag<T>> extends PendingContext<T, K> {
+class LateInitContext<T, K extends Tag<T>> extends PendingContext<T, K> {
   final T Function() init;
 
   LateInitContext(super.tag, this.init);
@@ -255,7 +265,7 @@ class LateInitContext<T, K extends ContextTag<T>> extends PendingContext<T, K> {
   }
 
   @override
-  LateInitContext<T, I> withTag<I extends ContextTag<T>>(I tag) {
+  LateInitContext<T, I> withTag<I extends Tag<T>>(I tag) {
     return LateInitContext<T, I>(tag, init);
   }
 }
@@ -272,7 +282,7 @@ abstract class ContextSink<T> extends Sink<T> {
 
 class _ValueNotifierSink<T> extends ContextSink<T> {
   final BuildContext context;
-  final ContextTag<T> tag;
+  final Tag<T> tag;
 
   late ValueNotifier<T>? _notifier;
 
@@ -296,7 +306,7 @@ class _ValueNotifierSink<T> extends ContextSink<T> {
 }
 
 extension on BuildContext {
-  ContextSink<T>? sink<T>([ContextTag<T>? tag]) {
+  ContextSink<T>? sink<T>([Tag<T>? tag]) {
     final sink = _ValueNotifierSink<T>(this, tag ?? TypeTag<T>());
     if (sink._notifier == null) {
       return null;
@@ -307,7 +317,7 @@ extension on BuildContext {
 }
 
 extension UpdateContextValueExtension on BuildContext {
-  void Function(T value)? setValue<T>([ContextTag<T>? tag]) {
+  void Function(T value)? setValue<T>([Tag<T>? tag]) {
     final s = sink<T>(tag ?? TypeTag<T>());
     if (s == null) return null;
 
@@ -317,7 +327,7 @@ extension UpdateContextValueExtension on BuildContext {
   }
 
   void Function(T Function(T currentValue))? updateValue<T>([
-    ContextTag<T>? tag,
+    Tag<T>? tag,
   ]) {
     final s = sink<T>(tag ?? TypeTag<T>());
     if (s == null) return null;
@@ -328,8 +338,7 @@ extension UpdateContextValueExtension on BuildContext {
   }
 }
 
-class _LateInitContextProvider<T, K extends ContextTag<T>>
-    extends StatefulWidget {
+class _LateInitContextProvider<T, K extends Tag<T>> extends StatefulWidget {
   final LateInitContext<T, K> context;
   final T? value;
   final WidgetBuilder? builder;
@@ -348,7 +357,7 @@ class _LateInitContextProvider<T, K extends ContextTag<T>>
       __LateInitContextProviderState<T, K>();
 }
 
-class __LateInitContextProviderState<T, K extends ContextTag<T>>
+class __LateInitContextProviderState<T, K extends Tag<T>>
     extends State<_LateInitContextProvider<T, K>> {
   late T value;
 
