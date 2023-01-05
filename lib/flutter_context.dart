@@ -4,6 +4,9 @@ import 'package:flutter/material.dart';
 
 abstract class Tag<T> {
   const Tag();
+
+  @override
+  String toString() => runtimeType.toString();
 }
 
 class TypeTag<T> extends Tag<T> {
@@ -13,17 +16,25 @@ class TypeTag<T> extends Tag<T> {
   }
 
   const TypeTag._();
+
+  @override
+  String toString() => T.toString();
 }
 
 class ValueTag<T> extends Tag<T> {
   static final _tags = <dynamic, ValueTag>{};
 
+  final T _value;
+
   factory ValueTag(T value) {
-    final tag = _tags[value] ??= ValueTag<T>._();
+    final tag = _tags[value] ??= ValueTag<T>._(value);
     return tag as ValueTag<T>;
   }
 
-  const ValueTag._();
+  const ValueTag._(this._value);
+
+  @override
+  String toString() => '$runtimeType($_value)';
 }
 
 abstract class Context<T, K extends Tag<T>> {
@@ -192,13 +203,13 @@ class ContextConsumer<T> extends StatelessWidget {
     final w = context.dependOnInheritedWidgetOfExactType<_D>();
 
     if (w == null) {
-      throw Exception('No provider found for context ${tag.runtimeType}');
+      throw Exception('No provider found for $tag');
     }
 
     final notifier = w.deps[tag] as ValueNotifier<T>?;
 
     if (notifier == null) {
-      throw Exception('No provider found for context ${tag.runtimeType}');
+      throw Exception('No value found for $tag');
     }
 
     return notifier;
