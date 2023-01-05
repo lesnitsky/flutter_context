@@ -5,22 +5,20 @@ void main() {
   runApp(const MyApp());
 }
 
-final Counter = createContext<int>();
-final DeltaModifier = createContext<bool?>();
+final Counter = createContext<int>()(0);
+final DeltaModifier = createContext<bool?>()(false);
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
   @override
   Widget build(context) {
-    return context.mount(
-      children: [
-        Counter(0),
-        DeltaModifier(false),
-      ],
-      child: const MaterialApp(
-        title: 'Flutter Demo',
-        home: Home(title: 'Flutter Demo Home Page'),
+    return Counter.Provider(
+      child: DeltaModifier.Provider(
+        child: const MaterialApp(
+          title: 'Flutter Demo',
+          home: Home(title: 'Flutter Demo Home Page'),
+        ),
       ),
     );
   }
@@ -53,7 +51,7 @@ class Home extends StatelessWidget {
   }
 }
 
-class IncrementButton extends ConsumerWidget<bool?> {
+class IncrementButton extends StatelessWidget {
   const IncrementButton({super.key});
 
   int Function(int value) increment(bool? delta) {
@@ -61,36 +59,47 @@ class IncrementButton extends ConsumerWidget<bool?> {
   }
 
   @override
-  Widget build(BuildContext context, bool? value) {
-    return FloatingActionButton(
-      onPressed: () {
-        context.sink<int>()?.update(increment(value));
-      },
-      tooltip: 'Increment',
-      child: const Icon(Icons.add),
-    );
+  Widget build(BuildContext context) {
+    return DeltaModifier.Consumer((context, value, child) {
+      final update = context.updateValue(Counter.tag);
+
+      return FloatingActionButton(
+        onPressed: () {
+          update?.call(increment(value));
+        },
+        tooltip: 'Increment',
+        child: const Icon(Icons.add),
+      );
+    });
   }
 }
 
-class CounterText extends ConsumerWidget<int> {
+class CounterText extends StatelessWidget {
   const CounterText({super.key});
 
   @override
-  Widget build(BuildContext context, int value) {
+  Widget build(BuildContext context) {
     final headlineStyle = Theme.of(context).textTheme.headline4;
-    return Text(value.toString(), style: headlineStyle);
+
+    return Counter.Consumer((context, value, child) {
+      return Text(value.toString(), style: headlineStyle);
+    });
   }
 }
 
-class DeltaModifierCheckbox extends ConsumerWidget<bool?> {
+class DeltaModifierCheckbox extends StatelessWidget {
   const DeltaModifierCheckbox({super.key});
 
   @override
-  Widget build(BuildContext context, bool? value) {
-    return CheckboxListTile(
-      value: value,
-      onChanged: context.sink<bool?>()?.add,
-      title: const Text('Increment by 10'),
-    );
+  Widget build(BuildContext context) {
+    return DeltaModifier.Consumer((context, value, child) {
+      final setBool = context.setValue(DeltaModifier.tag);
+
+      return CheckboxListTile(
+        value: value,
+        onChanged: setBool,
+        title: const Text('Increment by 10'),
+      );
+    });
   }
 }

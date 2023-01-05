@@ -16,10 +16,6 @@ class TypeTag<T> extends ContextTag<T> {
   const TypeTag._();
 }
 
-abstract class Mountable {
-  Widget mount({required WidgetBuilder builder});
-}
-
 abstract class Context<T, K extends ContextTag<T>> {
   final K tag;
 
@@ -65,8 +61,7 @@ class PendingContext<T, K extends ContextTag<T>> extends Context<T, K> {
   }
 }
 
-abstract class ValueContext<T, K extends ContextTag<T>> extends Context<T, K>
-    implements Mountable {
+abstract class ValueContext<T, K extends ContextTag<T>> extends Context<T, K> {
   T get value;
 
   const ValueContext(super.tag);
@@ -81,20 +76,17 @@ abstract class ValueContext<T, K extends ContextTag<T>> extends Context<T, K>
     return FinalContext(tag, value);
   }
 
-  @override
-  Widget mount({required WidgetBuilder builder}) {
-    return Provider(builder: builder);
-  }
-
   Widget Provider({
     T? value,
-    required WidgetBuilder builder,
+    WidgetBuilder? builder,
+    Widget? child,
   }) {
     return ContextProvider<T, K>(
       key: ValueKey(value),
       value: value ?? this.value,
       builder: builder,
       context: this,
+      child: child,
     );
   }
 }
@@ -108,15 +100,17 @@ class FinalContext<T, K extends ContextTag<T>> extends ValueContext<T, K> {
 
 class ContextProvider<T, K extends ContextTag<T>> extends StatefulWidget {
   final Context<T, K> context;
-  final WidgetBuilder builder;
+  final WidgetBuilder? builder;
+  final Widget? child;
 
   final T value;
 
   const ContextProvider({
     super.key,
     required this.context,
-    required this.builder,
     required this.value,
+    this.builder,
+    this.child,
   });
 
   @override
@@ -143,7 +137,7 @@ class _ContextProviderState<T, K extends ContextTag<T>>
   Widget build(BuildContext context) {
     return _D(
       deps: deps,
-      child: Builder(builder: widget.builder),
+      child: widget.child ?? Builder(builder: widget.builder!),
     );
   }
 
@@ -232,62 +226,26 @@ class _D extends InheritedWidget {
   }
 }
 
-abstract class ConsumerWidget<T> extends Widget {
-  ContextTag<T> get tag => TypeTag<T>();
-
-  const ConsumerWidget({
-    super.key,
-  });
-
-  @override
-  Element createElement() {
-    return ConsumerWidgetElement(this);
-  }
-
-  Widget build(BuildContext context, T value);
-}
-
-class ConsumerWidgetElement<T> extends ComponentElement {
-  ConsumerWidgetElement(ConsumerWidget<T> widget) : super(widget);
-
-  @override
-  ConsumerWidget<T> get widget => super.widget as ConsumerWidget<T>;
-
-  @override
-  Widget build() {
-    return ContextConsumer<T>(
-      tag: widget.tag,
-      builder: (context, value, child) {
-        return widget.build(context, value);
-      },
-    );
-  }
-}
-
 PendingContext<T, ContextTag<T>> createContext<T>() {
   return PendingContext<T, ContextTag<T>>(TypeTag<T>());
 }
 
-class LateInitContext<T, K extends ContextTag<T>> extends PendingContext<T, K>
-    implements Mountable {
+class LateInitContext<T, K extends ContextTag<T>> extends PendingContext<T, K> {
   final T Function() init;
 
   LateInitContext(super.tag, this.init);
 
   @override
-  Widget mount({required WidgetBuilder builder}) {
-    return Provider(builder: builder);
-  }
-
-  @override
   Widget Provider({
     T? value,
-    required Widget Function(BuildContext context) builder,
+    WidgetBuilder? builder,
+    Widget? child,
   }) {
     return _LateInitContextProvider<T, K>(
       context: this,
       value: value,
       builder: builder,
+      child: child,
     );
   }
 
@@ -337,7 +295,7 @@ class _ValueNotifierSink<T> extends ContextSink<T> {
   }
 }
 
-extension ContextSinkExtension on BuildContext {
+extension on BuildContext {
   ContextSink<T>? sink<T>([ContextTag<T>? tag]) {
     final sink = _ValueNotifierSink<T>(this, tag ?? TypeTag<T>());
     if (sink._notifier == null) {
@@ -348,16 +306,40 @@ extension ContextSinkExtension on BuildContext {
   }
 }
 
+extension UpdateContextValueExtension on BuildContext {
+  void Function(T value)? setValue<T>([ContextTag<T>? tag]) {
+    final s = sink<T>(tag ?? TypeTag<T>());
+    if (s == null) return null;
+
+    return (value) {
+      s.add(value);
+    };
+  }
+
+  void Function(T Function(T currentValue))? updateValue<T>([
+    ContextTag<T>? tag,
+  ]) {
+    final s = sink<T>(tag ?? TypeTag<T>());
+    if (s == null) return null;
+
+    return (update) {
+      s.update(update);
+    };
+  }
+}
+
 class _LateInitContextProvider<T, K extends ContextTag<T>>
     extends StatefulWidget {
   final LateInitContext<T, K> context;
   final T? value;
-  final Widget Function(BuildContext context) builder;
+  final WidgetBuilder? builder;
+  final Widget? child;
 
   const _LateInitContextProvider({
     super.key,
     required this.context,
-    required this.builder,
+    this.builder,
+    this.child,
     this.value,
   });
 
@@ -395,46 +377,7 @@ class __LateInitContextProviderState<T, K extends ContextTag<T>>
       context: widget.context,
       value: value,
       builder: widget.builder,
-    );
-  }
-}
-
-extension MountExtension on BuildContext {
-  Widget mount({required List<Mountable> children, required Widget child}) {
-    return _Mount(
-      children: children,
-      child: child,
-    );
-  }
-}
-
-class MountableChild implements Mountable {
-  final Widget child;
-
-  const MountableChild(this.child);
-
-  @override
-  Widget mount({required WidgetBuilder builder}) {
-    return child;
-  }
-}
-
-class _Mount extends StatelessWidget {
-  final List<Mountable> children;
-  final Widget child;
-
-  const _Mount({
-    required this.children,
-    required this.child,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return [MountableChild(child), ...children.reversed].fold<Widget>(
-      child,
-      (child, mountable) {
-        return mountable.mount(builder: (context) => child);
-      },
+      child: widget.child,
     );
   }
 }
