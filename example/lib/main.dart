@@ -61,7 +61,7 @@ class IncrementButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return DeltaModifier.Consumer((context, value, child) {
-      final update = context.updateValue(Counter.tag);
+      final update = context.updateValue(Counter);
 
       return FloatingActionButton(
         onPressed: () {
@@ -93,7 +93,7 @@ class DeltaModifierCheckbox extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return DeltaModifier.Consumer((context, value, child) {
-      final setBool = context.setValue(DeltaModifier.tag);
+      final setBool = context.setValue(DeltaModifier);
 
       return CheckboxListTile(
         value: value,
