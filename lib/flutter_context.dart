@@ -1,6 +1,12 @@
 // ignore_for_file: non_constant_identifier_names
 
-import 'package:flutter/material.dart';
+import 'package:flutter/widgets.dart';
+
+typedef ConsumerBuilder = Widget Function(
+  BuildContext context,
+  dynamic value,
+  Widget? child,
+);
 
 abstract class Context<T> {
   const Context();
@@ -8,8 +14,9 @@ abstract class Context<T> {
   Context<T> call(T value);
 
   Widget Consumer(
-    Widget Function(BuildContext context, T value, Widget? child) builder, {
+    ConsumerBuilder builder, {
     Widget? child,
+    Key? key,
   }) {
     return ContextConsumer<T>(
       context: this,
@@ -24,7 +31,7 @@ class PendingContext<T> extends Context<T> {
 
   Widget Provider({
     required T value,
-    Widget Function(BuildContext context)? builder,
+    WidgetBuilder? builder,
     Widget? child,
   }) {
     return ContextProvider<T>(
@@ -32,6 +39,22 @@ class PendingContext<T> extends Context<T> {
       builder: builder,
       context: this,
       child: child,
+    );
+  }
+
+  Widget bind({
+    required T value,
+    required ConsumerBuilder builder,
+    Widget? child,
+  }) {
+    return Provider(
+      value: value,
+      child: child,
+      builder: (context) {
+        return Consumer((context, value, child) {
+          return builder(context, value, child);
+        });
+      },
     );
   }
 
@@ -52,15 +75,32 @@ abstract class ValueContext<T> extends Context<T> {
   }
 
   Widget Provider({
+    Key? key,
     T? value,
     WidgetBuilder? builder,
     Widget? child,
   }) {
     return ContextProvider<T>(
-      key: ValueKey(value),
+      key: key,
       value: value ?? this.value,
       builder: builder,
       context: this,
+      child: child,
+    );
+  }
+
+  Widget bind({
+    T? value,
+    required ConsumerBuilder builder,
+    Widget? child,
+  }) {
+    return Provider(
+      value: value ?? this.value,
+      builder: (context) {
+        return Consumer((context, value, child) {
+          return builder(context, value, child);
+        });
+      },
       child: child,
     );
   }
@@ -139,7 +179,7 @@ class _ContextProviderState<T> extends State<ContextProvider<T>> {
 
 class ContextConsumer<T> extends StatelessWidget {
   final Context<T> context;
-  final Widget Function(BuildContext context, T value, Widget? child) builder;
+  final ConsumerBuilder builder;
   final Widget? child;
 
   const ContextConsumer({
@@ -353,4 +393,77 @@ class __LateInitContextProviderState<T>
       child: widget.child,
     );
   }
+}
+
+class ContextListener<T> extends ProxyWidget {
+  final Context<T> context;
+  final void Function(T value) onValue;
+
+  const ContextListener({
+    super.key,
+    required super.child,
+    required this.context,
+    required this.onValue,
+  });
+
+  @override
+  Element createElement() {
+    return ContextListenerElement<T>(this);
+  }
+}
+
+class ContextListenerElement<T> extends ProxyElement {
+  ContextListenerElement(super.widget);
+
+  @override
+  ContextListener<T> get widget => super.widget as ContextListener<T>;
+
+  late ValueNotifier<T> notifier;
+  bool _reassemble = false;
+
+  @override
+  void mount(Element? parent, Object? newSlot) {
+    super.mount(parent, newSlot);
+
+    notifier = ContextConsumer.getNotifier(this, widget.context);
+    notifier.addListener(_notifyListener);
+  }
+
+  void _notifyListener() {
+    widget.onValue(notifier.value);
+  }
+
+  @override
+  void reassemble() {
+    super.reassemble();
+    _reassemble = true;
+  }
+
+  @override
+  void update(ContextListener<T> newWidget) {
+    super.update(newWidget);
+
+    if (_reassemble) {
+      _reassemble = false;
+      return;
+    }
+
+    if (newWidget.context != widget.context) {
+      notifier.removeListener(_notifyListener);
+      notifier = ContextConsumer.getNotifier(this, newWidget.context);
+      notifier.addListener(_notifyListener);
+    } else if (newWidget.onValue != widget.onValue) {
+      notifier.removeListener(_notifyListener);
+      notifier.addListener(_notifyListener);
+    }
+  }
+
+  @override
+  void unmount() {
+    super.unmount();
+    notifier.removeListener(_notifyListener);
+  }
+
+  @override
+  void notifyClients(covariant ProxyWidget oldWidget) {}
 }
