@@ -244,31 +244,6 @@ PendingContext<T> createContext<T>() {
   return PendingContext<T>();
 }
 
-class LateInitContext<T> extends PendingContext<T> {
-  final T Function() init;
-
-  LateInitContext(this.init);
-
-  @override
-  Widget Provider({
-    T? value,
-    WidgetBuilder? builder,
-    Widget? child,
-  }) {
-    return _LateInitContextProvider<T>(
-      context: this,
-      value: value,
-      builder: builder,
-      child: child,
-    );
-  }
-
-  @override
-  ValueContext<T> call(T value) {
-    return FinalContext(value);
-  }
-}
-
 abstract class ContextSink<T> extends Sink<T> {
   @override
   void add(T data);
@@ -286,11 +261,7 @@ class _ValueNotifierSink<T> extends ContextSink<T> {
   late ValueNotifier<T>? _notifier;
 
   _ValueNotifierSink(this.context, this.dataContext) {
-    try {
-      _notifier = ContextConsumer.getNotifier<T>(context, dataContext);
-    } catch (e) {
-      _notifier = null;
-    }
+    _notifier = ContextConsumer.getNotifier<T>(context, dataContext);
   }
 
   @override
@@ -305,20 +276,15 @@ class _ValueNotifierSink<T> extends ContextSink<T> {
 }
 
 extension on BuildContext {
-  ContextSink<T>? sink<T>(Context<T> context) {
+  ContextSink<T> sink<T>(Context<T> context) {
     final sink = _ValueNotifierSink<T>(this, context);
-    if (sink._notifier == null) {
-      return null;
-    }
-
     return sink;
   }
 }
 
 extension BuildContextExtensions on BuildContext {
-  void Function(T value)? setValue<T>(Context<T> context) {
+  void Function(T value) setValue<T>(Context<T> context) {
     final s = sink<T>(context);
-    if (s == null) return null;
 
     return (value) {
       s.add(value);
@@ -329,69 +295,31 @@ extension BuildContextExtensions on BuildContext {
     Context<T> context,
   ) {
     final s = sink<T>(context);
-    if (s == null) return null;
 
     return (update) {
       s.update(update);
     };
   }
 
-  T? read<T>(Context<T> context) {
+  T read<T>(Context<T> context) {
     final notifier = ContextConsumer.getNotifier<T>(this, context);
     return notifier.value;
   }
-}
 
-class _LateInitContextProvider<T> extends StatefulWidget {
-  final LateInitContext<T> context;
-  final T? value;
-  final WidgetBuilder? builder;
-  final Widget? child;
+  T watch<T>(Context<T> context) {
+    final notifier = ContextConsumer.getNotifier<T>(this, context);
 
-  const _LateInitContextProvider({
-    super.key,
-    required this.context,
-    this.builder,
-    this.child,
-    this.value,
-  });
-
-  @override
-  State<_LateInitContextProvider> createState() =>
-      __LateInitContextProviderState<T>();
-}
-
-class __LateInitContextProviderState<T>
-    extends State<_LateInitContextProvider<T>> {
-  late T value;
-
-  @override
-  void initState() {
-    super.initState();
-    value = widget.context.init();
-  }
-
-  @override
-  void didUpdateWidget(covariant _LateInitContextProvider<T> oldWidget) {
-    super.didUpdateWidget(oldWidget);
-
-    if (oldWidget.context == widget.context) {
-      if (oldWidget.value != widget.value && widget.value != null) {
-        value = widget.value as T;
+    void listener() {
+      if (mounted) {
+        (this as Element).markNeedsBuild();
+      } else {
+        notifier.removeListener(listener);
       }
-    } else {
-      value = widget.context.init();
     }
-  }
 
-  @override
-  Widget build(BuildContext context) {
-    return ContextProvider(
-      context: widget.context,
-      value: value,
-      builder: widget.builder,
-      child: widget.child,
-    );
+    notifier.addListener(listener);
+
+    return notifier.value;
   }
 }
 
@@ -466,4 +394,23 @@ class ContextListenerElement<T> extends ProxyElement {
 
   @override
   void notifyClients(covariant ProxyWidget oldWidget) {}
+}
+
+class MultiContextProvider extends StatelessWidget {
+  final List<ValueContext> contexts;
+  final Widget child;
+
+  const MultiContextProvider({
+    super.key,
+    required this.contexts,
+    required this.child,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return contexts.fold<Widget>(
+      child,
+      (child, provider) => provider.Provider(child: child),
+    );
+  }
 }

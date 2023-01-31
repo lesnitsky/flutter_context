@@ -5,20 +5,25 @@ void main() {
   runApp(const MyApp());
 }
 
-final Counter = createContext<int>()(0);
-final DeltaModifier = createContext<bool?>()(false);
+final counterContext = createContext<int>()(0);
+final deltaContext = createContext<bool>()(false);
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
   @override
   Widget build(context) {
-    return Counter.Provider(
-      child: DeltaModifier.Provider(
-        child: const MaterialApp(
-          title: 'Flutter Demo',
-          home: Home(title: 'Flutter Demo Home Page'),
-        ),
+    const title = 'Flutter Context Demo';
+
+    return MultiContextProvider(
+      contexts: [
+        counterContext,
+        deltaContext,
+      ],
+      child: MaterialApp(
+        title: title,
+        theme: ThemeData(useMaterial3: true),
+        home: const Home(title: title),
       ),
     );
   }
@@ -39,10 +44,8 @@ class Home extends StatelessWidget {
             Text('You have pushed the button this many times:'),
             SizedBox(height: 16),
             CounterText(),
-            SizedBox(
-              width: 200,
-              child: DeltaModifierCheckbox(),
-            ),
+            SizedBox(height: 16),
+            DeltaModifierCheckbox()
           ],
         ),
       ),
@@ -54,23 +57,25 @@ class Home extends StatelessWidget {
 class IncrementButton extends StatelessWidget {
   const IncrementButton({super.key});
 
-  int Function(int value) increment(bool? delta) {
-    return (v) => v + (delta ?? false ? 10 : 1);
+  VoidCallback increment(BuildContext context) {
+    final update = context.updateValue(counterContext)!;
+
+    return () {
+      final delta = context.read(deltaContext);
+
+      update((currentValue) {
+        return currentValue + (delta ? 10 : 1);
+      });
+    };
   }
 
   @override
   Widget build(BuildContext context) {
-    return DeltaModifier.Consumer((context, value, child) {
-      final update = context.updateValue(Counter);
-
-      return FloatingActionButton(
-        onPressed: () {
-          update?.call(increment(value));
-        },
-        tooltip: 'Increment',
-        child: const Icon(Icons.add),
-      );
-    });
+    return FloatingActionButton(
+      onPressed: increment(context),
+      tooltip: 'Increment',
+      child: const Icon(Icons.add),
+    );
   }
 }
 
@@ -79,11 +84,10 @@ class CounterText extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final headlineStyle = Theme.of(context).textTheme.headline4;
+    final value = context.watch(counterContext);
+    final titleStyle = Theme.of(context).textTheme.headlineMedium;
 
-    return Counter.Consumer((context, value, child) {
-      return Text(value.toString(), style: headlineStyle);
-    });
+    return Text(value.toString(), style: titleStyle);
   }
 }
 
@@ -92,14 +96,13 @@ class DeltaModifierCheckbox extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return DeltaModifier.Consumer((context, value, child) {
-      final setBool = context.setValue(DeltaModifier);
+    final setValue = context.setValue(deltaContext);
+    final value = context.watch(deltaContext);
 
-      return CheckboxListTile(
-        value: value,
-        onChanged: setBool,
-        title: const Text('Increment by 10'),
-      );
-    });
+    return TextButton.icon(
+      icon: Icon(value ? Icons.check_box : Icons.check_box_outline_blank),
+      onPressed: () => setValue(!value),
+      label: const Text('Increment by 10'),
+    );
   }
 }
